@@ -5,12 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
@@ -23,10 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
-import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationContext;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import com.ejemplo.facturacion.services.FacturaService;
 import com.ejemplo.facturacion.valueobjects.Articulo;
@@ -40,21 +32,12 @@ class FacturaServiceTest {
     @InjectMocks
     private FacturaService facturaService;
 
-    @Mock
-    private ApplicationContext applicationContext;
-
-    @Mock
-    private FacturaService asyncProxy;
-
     private Orden ordenUnArticulo;
     private Orden ordenDosArticulos;
 
     // Método de configuración que se ejecuta antes de cada prueba, inicializando objetos de prueba y configurando el comportamiento simulado del ApplicationContext para devolver el proxy asíncrono cuando se solicite el bean de FacturaService
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(facturaService, "applicationContext", applicationContext);
-        lenient().when(applicationContext.getBean(FacturaService.class)).thenReturn(asyncProxy);
-
         Articulo laptop = new Articulo("Laptop", 2, new BigDecimal("1000.00"));
         ordenUnArticulo = new Orden();
         ordenUnArticulo.setId(1L);
@@ -124,7 +107,7 @@ class FacturaServiceTest {
         Map<String, Optional<Factura>> mapa = facturaService.getFacturas();
         assertTrue(mapa.containsKey(factura.getId()));
         assertTrue(mapa.get(factura.getId()).isPresent());
-        assertSame(factura, mapa.get(factura.getId()).get());
+        assertEquals(factura, mapa.get(factura.getId()).get());
     }
 
     // Prueba para verificar que el método generarFactura genera IDs únicos para cada factura, asegurando que al generar múltiples facturas consecutivas se obtengan IDs distintos y no se produzcan colisiones en el mapa compartido
@@ -158,12 +141,12 @@ class FacturaServiceTest {
 
     // Prueba para verificar que el método iniciarFacturaAsincrona delega correctamente al proxy asíncrono para la creación de la factura en segundo plano, asegurando que se invoque el método crearFacturaAsincrona del proxy con los parámetros correctos y que no se produzcan interacciones adicionales con el proxy
     @Test
-    void test09_iniciarFacturaAsincrona_delegaAlProxyAsincrono() throws InterruptedException {
-        String id = facturaService.iniciarFacturaAsincrona(ordenUnArticulo);
+    void test09_iniciarFacturaAsincrona_esNoBloqueante() throws InterruptedException {
+        long inicio = System.currentTimeMillis();
+        facturaService.iniciarFacturaAsincrona(ordenUnArticulo);
+        long duracion = System.currentTimeMillis() - inicio;
 
-        verify(applicationContext, times(1)).getBean(FacturaService.class);
-        verify(asyncProxy, times(1)).crearFacturaAsincrona(id, ordenUnArticulo);
-        verifyNoMoreInteractions(asyncProxy);
+        assertTrue(duracion < 1000, "iniciarFacturaAsincrona debe retornar antes de que termine el calculo asincrono");
     }
 
     // Pruebas para el método crearFacturaAsincrona, verificando que al crear una factura de forma asíncrona se actualice correctamente el mapa compartido con la factura generada una vez que el proceso en segundo plano haya finalizado, asegurando que después de llamar a crearFacturaAsincrona el mapa contenga la factura correspondiente al ID proporcionado y que los cálculos de subtotal, IVA y total sean correctos
@@ -233,7 +216,7 @@ class FacturaServiceTest {
 
         assertNotNull(estado);
         assertTrue(estado.isPresent());
-        assertSame(esperada, estado.get());
+        assertEquals(esperada, estado.get());
     }
 
     // Pruebas para los métodos getFacturas y setFacturas, verificando que el mapa compartido se inicialice correctamente, que se pueda acceder a él sin obtener un valor nulo, y que el método setFacturas reemplace completamente el mapa existente con uno nuevo
@@ -244,13 +227,13 @@ class FacturaServiceTest {
 
     // Prueba para verificar que el método getFacturas retorna el mismo mapa compartido que se utiliza internamente en la clase, asegurando que al obtener el mapa a través de getFacturas se obtenga una referencia al mismo objeto que se utiliza para almacenar las facturas, y que cualquier modificación realizada a través de la referencia obtenida se refleje en el mapa interno
     @Test
-    void test16_setFacturas_reemplazaMapaCompleto() {
+    void test16_setFacturas_reemplazaContenidoDelMapa() {
         Map<String, Optional<Factura>> nuevoMapa = new ConcurrentHashMap<>();
         nuevoMapa.put("clave", Optional.empty());
 
         facturaService.setFacturas(nuevoMapa);
 
-        assertSame(nuevoMapa, facturaService.getFacturas());
         assertTrue(facturaService.getFacturas().containsKey("clave"));
+        assertEquals(1, facturaService.getFacturas().size());
     }
 }

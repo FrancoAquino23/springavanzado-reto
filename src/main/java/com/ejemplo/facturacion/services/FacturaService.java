@@ -18,8 +18,7 @@ import com.ejemplo.facturacion.valueobjects.Orden;
 @Service
 public class FacturaService {
 
-    // Mapa compartido: mismo bean, misma instancia, sin proxies intermedios
-    private final Map<String, Optional<Factura>> facturas = new ConcurrentHashMap<>();
+    private Map<String, Optional<Factura>> facturas = new ConcurrentHashMap<>();
 
     // Método síncrono para generar una factura a partir de una orden, bloqueando el hilo durante el proceso de cálculo 
     public Factura generarFactura(final Orden orden) throws InterruptedException {
@@ -111,9 +110,8 @@ public class FacturaService {
         return facturas;
     }
 
-    // Método setter para inyectar un mapa de facturas, utilizado principalmente en tests para establecer un estado previo antes de ejecutar las pruebas
+    // Método setter para el mapa de facturas, permitiendo inyectar un estado previo en el servicio (usado principalmente en tests para simular diferentes escenarios)
     public void setFacturas(Map<String, Optional<Factura>> facturas) {
-        this.facturas.clear();
-        this.facturas.putAll(facturas);
+        this.facturas = facturas;
     }
 }
