@@ -37,7 +37,10 @@ public class GestionUsuariosConfig {
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         http.authorizeHttpRequests(auth -> auth
-                .requestMatchers("/autenticar", "/actuator/health").permitAll()
+                .requestMatchers("/autenticar").permitAll()
+                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/v1/**").authenticated()
+                .requestMatchers("/v2/**").authenticated()
                 .anyRequest().authenticated());
 
         http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
