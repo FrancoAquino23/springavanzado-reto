@@ -3,7 +3,6 @@ package com.ejemplo.facturacion.security;
 import java.io.IOException;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationContext;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -11,6 +10,7 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,36 +18,46 @@ import jakarta.servlet.http.HttpServletResponse;
 
 @Component
 public class JwtFilter extends OncePerRequestFilter {
-    private static final String PREFIJO_TOKEN_JW_STRING = "Bearer ";
-    private static final String NOMBRE_ENCABEZADO_AUTORIZACION = "Authorization";
+
+    private static final String PREFIJO_BEARER = "Bearer ";
+    private static final String HEADER_AUTORIZACION = "Authorization";
 
     @Autowired private JwtService jwtService;
-    @Autowired private ApplicationContext contextoAplicacion;
-
-    private JPADetalleUsuariosService getJPADetalleUsuariosService() {
-        return contextoAplicacion.getBean(JPADetalleUsuariosService.class);
-    }
+    @Autowired private JPADetalleUsuariosService detalleUsuariosService;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain)
             throws ServletException, IOException {
-        String encabezadoAutorizacion = request.getHeader(NOMBRE_ENCABEZADO_AUTORIZACION);
-        String token = null;
-        String nombreUsuario = null;
 
-        if (encabezadoAutorizacion != null && encabezadoAutorizacion.startsWith(PREFIJO_TOKEN_JW_STRING)) {
-            token = encabezadoAutorizacion.substring(PREFIJO_TOKEN_JW_STRING.length());
-            nombreUsuario = jwtService.extraerNombreUsuario(token);
-        }
+        String encabezado = request.getHeader(HEADER_AUTORIZACION);
 
-        if (nombreUsuario != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails detallesUsuario = getJPADetalleUsuariosService().loadUserByUsername(nombreUsuario);
+        if (encabezado != null && encabezado.startsWith(PREFIJO_BEARER)) {
+            String token = encabezado.substring(PREFIJO_BEARER.length());
+            try {
+                String nombreUsuario = jwtService.extraerNombreUsuario(token);
 
-            if (jwtService.validarToken(token, detallesUsuario)) {
-                UsernamePasswordAuthenticationToken tokenAutenticado = new UsernamePasswordAuthenticationToken(detallesUsuario,
-                        null, detallesUsuario.getAuthorities());
-                tokenAutenticado.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(tokenAutenticado);
+                if (nombreUsuario != null
+                        && SecurityContextHolder.getContext().getAuthentication() == null) {
+
+                    UserDetails detallesUsuario =
+                            detalleUsuariosService.loadUserByUsername(nombreUsuario);
+
+                    if (jwtService.validarToken(token, detallesUsuario)) {
+                        UsernamePasswordAuthenticationToken autenticacion =
+                                new UsernamePasswordAuthenticationToken(
+                                        detallesUsuario,
+                                        null,
+                                        detallesUsuario.getAuthorities());
+                        autenticacion.setDetails(
+                                new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(autenticacion);
+                    }
+                }
+            } catch (JwtException | IllegalArgumentException e) {
+                // Token inválido, expirado o malformado → continuar sin autenticar (→ 401/403)
+                SecurityContextHolder.clearContext();
             }
         }
 
